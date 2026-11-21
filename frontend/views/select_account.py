@@ -15,7 +15,7 @@ with gap_col:
           <h3>👖 GAP</h3>
           <span class="tag">Excel built automatically</span>
           <ul>
-            <li>Logs in to Infor Nexus with the GAP ID</li>
+            <li>Logs in to Infor Nexus with your GAP ID</li>
             <li>Searches DPO List Beta by date, description, buyer &amp; custom code</li>
             <li>Collects order totals and generates the APL booking Excel</li>
           </ul>
@@ -24,13 +24,13 @@ with gap_col:
         unsafe_allow_html=True,
     )
     if st.button("Continue with GAP", type="primary", width="stretch", key="go_gap"):
-        st.switch_page(PAGES["gap"])
+        st.switch_page(PAGES["gap_login"])
 
 with sweater_col:
     st.markdown(
         f"""
         <div class="account-card" style="--c:{SWEATER_COLOR}">
-          <h3>🧶 Sweater</h3>
+          <h3>🧶 Sweater <span class="soon">SOON</span></h3>
           <span class="tag">Excel filled manually</span>
           <ul>
             <li>Download an empty APL booking Excel</li>
@@ -41,5 +41,5 @@ with sweater_col:
         """,
         unsafe_allow_html=True,
     )
-    if st.button("Continue with Sweater", type="primary", width="stretch", key="go_sweater"):
-        st.switch_page(PAGES["sweater"])
+    # Sweater page disabled
+    st.button("Continue with Sweater", width="stretch", key="go_sweater", disabled=True)
