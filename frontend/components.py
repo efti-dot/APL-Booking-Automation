@@ -11,6 +11,8 @@ NAVY = "#1F3A5F"
 PAGES = {
     "home": "frontend/views/home.py",
     "select": "frontend/views/select_account.py",
+    "gap_login": "frontend/views/gap_login.py",
+    "gap_dpo": "frontend/views/gap_dpo.py",
 }
 
 _CSS = f"""
