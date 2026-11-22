@@ -2,7 +2,7 @@ import streamlit as st
 
 from config import settings
 from excel_prep.infor_nexus.login import LoginError, login
-from frontend.auth import current_login, save_login
+from frontend.auth import current_login, pop_login_notice, save_login
 from frontend.components import GAP_COLOR, PAGES, back_button, inject_css, page_header
 
 inject_css()
@@ -15,6 +15,10 @@ back_button("select")
 _, mid, _ = st.columns([1, 1.4, 1])
 with mid:
     page_header("Infor Nexus login", "GAP account · sign in with your own ID.", GAP_COLOR)
+
+    notice = pop_login_notice()
+    if notice:
+        st.warning(notice)
 
     has_default = bool(settings.NEXUS_USERNAME and settings.NEXUS_PASSWORD)
 
