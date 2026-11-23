@@ -12,6 +12,7 @@ from .config import CONFIG
 
 
 class SessionExpired(Exception):
+    """The Infor Nexus session has expired; the user must log in again."""
 
 
 class ReportError(Exception):

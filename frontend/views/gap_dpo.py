@@ -1,13 +1,15 @@
 import html
+import mimetypes
 from datetime import date, timedelta
 
 import streamlit as st
 
-from excel_prep.infor_nexus.dpo_list import ReportError, SessionExpired, fill_dpo_report_filter
+from excel_prep.infor_nexus.dpo_list import ReportError, SessionExpired, download_dpo_report
 from frontend.auth import logout, require_login
 from frontend.components import GAP_COLOR, PAGES, inject_css, page_header
 
 DATE_FMT = "YYYY/MM/DD"
+RESULT_KEY = "dpo_report"
 
 inject_css()
 session = require_login(PAGES["gap_login"])
@@ -26,30 +28,28 @@ def date_range_dialog() -> None:
         st.error("'From' date must be on or before 'To' date.")
         return
 
-    result, error = None, None
-    with st.spinner("Opening DPO Beta report in Infor Nexus…"):
+    report, error = None, None
+    with st.spinner("Getting DPO List Beta from Infor Nexus… big ranges can take a minute."):
         try:
-            result = fill_dpo_report_filter(session["storage_state"], d_from, d_to)
+            report = download_dpo_report(session["storage_state"], d_from, d_to)
         except SessionExpired as exc:
             logout(notice=str(exc))
             st.switch_page(PAGES["gap_login"])
         except ReportError as exc:
-            error = str(exc)
+            error = exc
 
     if error:
-        st.error(error, icon="⚠️")
+        st.error(str(error))
+        if error.screenshot:
+            with st.expander("What Infor Nexus showed"):
+                st.image(error.screenshot)
         return
 
-    st.session_state["dpo_filter_result"] = {
-        "requested": (d_from, d_to),
-        "shown_from": result.date_from,
-        "shown_to": result.date_to,
-        "screenshot": result.screenshot,
-    }
-    st.rerun()  # closes the popup and shows the result on the page
+    st.session_state[RESULT_KEY] = {"requested": (d_from, d_to), "report": report}
+    st.rerun()
 
 
-# ── Page ─────────────────────────────────────────────────────────────────
+# Page
 top_left, top_right = st.columns([4, 1])
 with top_left:
     page_header(
@@ -68,12 +68,25 @@ with mid:
     if st.button("\n\nDownload DPO Beta Excel", key="dpo_download", type="primary"):
         date_range_dialog()
 
-done = st.session_state.get("dpo_filter_result")
+done = st.session_state.get(RESULT_KEY)
 if done:
     d_from, d_to = done["requested"]
-    st.success(
-        f"Infor Nexus filter set: **Latest Ship Cxl** between "
-        f"**{d_from:%Y-%m-%d}** and **{d_to:%Y-%m-%d}** "
-        f"(Infor Nexus shows `{done['shown_from']}` – `{done['shown_to']}`).",
-    )
-    
+    report = done["report"]
+    size_kb = max(1, len(report.content) // 1024)
+
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        st.success(
+            f"DPO List Beta is ready: **Latest Ship Cxl** between "
+            f"**{d_from:%d/%m/%Y}** and **{d_to:%d/%m/%Y}** "
+            f"(Infor Nexus used `{report.date_from}` – `{report.date_to}`).",
+        )
+        st.download_button(
+            f"Save {report.filename} to this PC ({size_kb:,} KB)",
+            data=report.content,
+            file_name=report.filename,
+            mime=mimetypes.guess_type(report.filename)[0] or "application/octet-stream",
+            on_click="ignore",  # no rerun; the file stays available until logout or a new run
+            type="primary",
+            width="stretch",
+        )
