@@ -15,7 +15,6 @@ CONFIG = {
     "error_selector": "",  # TODO: selector of the "wrong password" message
     "timeout_ms": 30_000,
 
-    
     # DPO Beta report
     "dpo_report_url": os.getenv(
         "NEXUS_DPO_REPORT_URL",
@@ -28,8 +27,17 @@ CONFIG = {
     "date_box_selector": "input.gwt-DateBox.valuewidgetdatebox",
     "report_date_format": "%Y-%m-%d",
     "report_timeout_ms": 60_000,
-
     "run_button_selector": "button.btn.btn-primary.btn-mini",
     "run_button_text": "Run",
     "download_timeout_ms": 1800_000,  # big date ranges can take a while to generate
+
+    # add Total Amount for one PO at a time
+    "orders_search_url": os.getenv(
+        "NEXUS_ORDERS_SEARCH_URL", "https://network.infornexus.com/en/trade/InProgressOrders"
+    ),
+    "order_filter_selector": "input[name='ordersFilterOrder']",
+    "apply_button_selector": "input[type='button'][value='Apply']",
+    "result_cell_class": "listtablecell",
+    "total_amount_header_text": "Total Amount",
+    "order_search_timeout_ms": 60_000,
 }
