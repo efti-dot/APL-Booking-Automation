@@ -1,15 +1,17 @@
+import base64
 import html
-import mimetypes
+import json
 from datetime import date, timedelta
 
 import streamlit as st
 
-from excel_prep.infor_nexus.dpo_list import ReportError, SessionExpired, download_dpo_report
+from excel_prep.gap_pipeline import ReportError, SessionExpired, build_gap_dpo_excel
 from frontend.auth import logout, require_login
 from frontend.components import GAP_COLOR, PAGES, inject_css, page_header
 
 DATE_FMT = "YYYY/MM/DD"
 RESULT_KEY = "dpo_report"
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 inject_css()
 session = require_login(PAGES["gap_login"])
@@ -28,28 +30,55 @@ def date_range_dialog() -> None:
         st.error("'From' date must be on or before 'To' date.")
         return
 
-    report, error = None, None
-    with st.spinner("Getting DPO List Beta from Infor Nexus… big ranges can take a minute."):
-        try:
-            report = download_dpo_report(session["storage_state"], d_from, d_to)
-        except SessionExpired as exc:
-            logout(notice=str(exc))
-            st.switch_page(PAGES["gap_login"])
-        except ReportError as exc:
-            error = exc
+    bar = st.progress(0.0, text="Starting…")
+    st.caption("Each PO is searched in Infor Nexus one by one — please keep this tab open.")
+
+    excel, error = None, None
+    try:
+        # Uses the cookies
+        excel = build_gap_dpo_excel(
+            session["storage_state"], d_from, d_to,
+            progress=lambda fraction, message: bar.progress(min(fraction, 1.0), text=message),
+        )
+    except SessionExpired as exc:
+        logout(notice=str(exc))
+        st.switch_page(PAGES["gap_login"])
+    except ReportError as exc:
+        error = exc
 
     if error:
+        bar.empty()
         st.error(str(error))
         if error.screenshot:
             with st.expander("What Infor Nexus showed"):
                 st.image(error.screenshot)
         return
 
-    st.session_state[RESULT_KEY] = {"requested": (d_from, d_to), "report": report}
-    st.rerun()
+    # Kept only in this user's session
+    st.session_state[RESULT_KEY] = {"requested": (d_from, d_to), "excel": excel, "auto_download": True}
+    st.rerun()  # closes the popup
 
 
-# Page
+def auto_download(filename: str, content: bytes) -> None:
+    """Makes the user's browser save the file — it lands in *their* Downloads folder,
+    even when this app runs on the company server."""
+    st.html(
+        f"""<script>
+        (() => {{
+          const bytes = Uint8Array.from(atob("{base64.b64encode(content).decode()}"), c => c.charCodeAt(0));
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([bytes], {{type: "{XLSX_MIME}"}}));
+          a.download = {json.dumps(filename)};
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {{ URL.revokeObjectURL(a.href); a.remove(); }}, 2000);
+        }})();
+        </script>""",
+        unsafe_allow_javascript=True,
+    )
+
+
+#Page
 top_left, top_right = st.columns([4, 1])
 with top_left:
     page_header(
@@ -71,22 +100,36 @@ with mid:
 done = st.session_state.get(RESULT_KEY)
 if done:
     d_from, d_to = done["requested"]
-    report = done["report"]
-    size_kb = max(1, len(report.content) // 1024)
+    excel = done["excel"]
+    if done.pop("auto_download", False):  # only once, right after it was built
+        auto_download(excel.filename, excel.content)
 
+    found = sum(x.amount is not None for x in excel.lookups)
     _, mid, _ = st.columns([1, 2, 1])
     with mid:
         st.success(
-            f"DPO List Beta is ready: **Latest Ship Cxl** between "
-            f"**{d_from:%d/%m/%Y}** and **{d_to:%d/%m/%Y}** "
-            f"(Infor Nexus used `{report.date_from}` – `{report.date_to}`).",
+            f"**{excel.filename}** was downloaded to this PC.\n\n"
+            f"Latest Ship Cxl **{d_from:%d/%m/%Y} – {d_to:%d/%m/%Y}** · "
+            f"{len(excel.lookups)} POs ({excel.duplicates_removed} duplicate rows removed) · "
+            f"Total Amount found for **{found} of {len(excel.lookups)}**.",
         )
+        if excel.problems:
+            st.warning(
+                f"{len(excel.problems)} PO(s) need a look — their Total Amount cell is "
+                "yellow or empty in the Excel. Details below.",
+            )
+        with st.expander(f"Total Amount per PO ({len(excel.lookups)})", expanded=bool(excel.problems)):
+            st.dataframe(
+                [{"PO": x.po, "Total Amount": x.raw or "—", "Note": x.note} for x in excel.lookups],
+                hide_index=True,
+                width="stretch",
+            )
         st.download_button(
-            f"Save {report.filename} to this PC ({size_kb:,} KB)",
-            data=report.content,
-            file_name=report.filename,
-            mime=mimetypes.guess_type(report.filename)[0] or "application/octet-stream",
-            on_click="ignore",  # no rerun; the file stays available until logout or a new run
-            type="primary",
-            width="stretch",
+            "Didn't download? Save it again",
+            data=excel.content,
+            file_name=excel.filename,
+            mime=XLSX_MIME,
+            on_click="ignore",
+            type="tertiary",
+            icon=":material/download:",
         )
