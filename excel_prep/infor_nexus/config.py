@@ -29,9 +29,7 @@ CONFIG = {
     "report_timeout_ms": 60_000,
     "run_button_selector": "button.btn.btn-primary.btn-mini",
     "run_button_text": "Run",
-    "download_timeout_ms": 1800_000,  # big date ranges can take a while to generate
-
-    # add Total Amount for one PO at a time
+    "download_timeout_ms": 1800_000,
     "orders_search_url": os.getenv(
         "NEXUS_ORDERS_SEARCH_URL", "https://network.infornexus.com/en/trade/InProgressOrders"
     ),
@@ -40,4 +38,19 @@ CONFIG = {
     "result_cell_class": "listtablecell",
     "total_amount_header_text": "Total Amount",
     "order_search_timeout_ms": 60_000,
+
+    # Buyer and Destination
+    "orders_view_url": os.getenv(
+        "NEXUS_ORDERS_VIEW_URL", "https://network.infornexus.com/en/trade/OrdersView.jsp"
+    ),
+    "global_search_selector": "#navbarsearch",
+    "search_result_link_selector": "a.coreLink[href*='searchResultRank=']",
+    "search_result_type_selector": "span.preserveLineBreaks",
+    "search_result_type_order": "Order",
+    "search_result_value_selector": ".core-focus-link",
+    "buyer_label": "Buyer",
+    "destination_label": "Destination",
+    "search_result_timeout_ms": 30_000,
+    "search_retype_wait_ms": 10_000,
+    "search_card_fields_wait_ms": 8_000,
 }
