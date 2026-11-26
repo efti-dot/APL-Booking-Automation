@@ -7,7 +7,7 @@ import streamlit as st
 _KEY = "gap_nexus_session"
 _NOTICE_KEY = "gap_login_notice"
 
-GAP_STATE_KEYS = (_KEY, "dpo_filter_result")
+GAP_STATE_KEYS = (_KEY, "dpo_report")
 
 
 def save_login(username: str, storage_state: dict) -> None:

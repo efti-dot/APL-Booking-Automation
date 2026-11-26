@@ -104,25 +104,50 @@ if done:
     if done.pop("auto_download", False):  # only once, right after it was built
         auto_download(excel.filename, excel.content)
 
-    found = sum(x.amount is not None for x in excel.lookups)
-    _, mid, _ = st.columns([1, 2, 1])
+    total = len(excel.rows)
+    complete = sum(r.complete for r in excel.rows)
+    _, mid, _ = st.columns([1, 8, 1])
     with mid:
         st.success(
             f"**{excel.filename}** was downloaded to this PC.\n\n"
             f"Latest Ship Cxl **{d_from:%d/%m/%Y} – {d_to:%d/%m/%Y}** · "
-            f"{len(excel.lookups)} POs ({excel.duplicates_removed} duplicate rows removed) · "
-            f"Total Amount found for **{found} of {len(excel.lookups)}**.",
+            f"{total} POs ({excel.duplicates_removed} duplicate rows removed) · "
+            f"Total Amount, Buyer and Destination found for **{complete} of {total}**.",
+            icon="✅",
         )
         if excel.problems:
             st.warning(
-                f"{len(excel.problems)} PO(s) need a look — their Total Amount cell is "
-                "yellow or empty in the Excel. Details below.",
+                f"{len(excel.problems)} PO(s) need a look — their missing cells are "
+                "yellow in the Excel. See the Note column below.",
+                icon="⚠️",
             )
-        with st.expander(f"Total Amount per PO ({len(excel.lookups)})", expanded=bool(excel.problems)):
+        with st.expander(f"Details per PO ({total})", expanded=bool(excel.problems)):
             st.dataframe(
-                [{"PO": x.po, "Total Amount": x.raw or "—", "Note": x.note} for x in excel.lookups],
+                [
+                    {
+                        "PO": r.po,
+                        "Total Amount": r.amount.raw or "—",
+                        "Buyer": r.details.buyer or "—",
+                        "Destination": r.details.destination or "—",
+                        "Note": r.notes,
+                    }
+                    for r in excel.rows
+                ],
                 hide_index=True,
                 width="stretch",
+                column_config={"Note": st.column_config.TextColumn(width="large")},
+            )
+        debug = excel.debug
+        if debug:
+            st.download_button(
+                f"Download troubleshooting file (PO {debug.po})",
+                data=debug.details.debug_zip,
+                file_name=f"buyer_destination_debug_{debug.po}.zip",
+                mime="application/zip",
+                on_click="ignore",
+                icon=":material/bug_report:",
+                help="Screenshot + HTML of the Infor Nexus search result where Buyer/Destination "
+                     "couldn't be read. Send it to whoever maintains this app.",
             )
         st.download_button(
             "Didn't download? Save it again",
@@ -133,3 +158,4 @@ if done:
             type="tertiary",
             icon=":material/download:",
         )
+
