@@ -12,9 +12,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 
-# Assume the DPO number header
-PO_HEADERS = ("po number", "po #", "DPO", "po num", "po", "purchase order", "order number", "order #", "order no")
-TOTAL_AMOUNT_HEADER = "Total Amount"
+PO_HEADERS = ("DPO",)
 HEADER_SCAN_ROWS = 20
 MISSING_FILL = PatternFill("solid", fgColor="FFF2CC")  # light yellow = amount not found
 
@@ -60,37 +58,49 @@ def load_and_dedupe(content: bytes, filename: str) -> DpoSheet:
     return DpoSheet(wb, header_row, po_col, pos, rows_before, len(duplicate_rows))
 
 
-def add_total_amount(sheet: DpoSheet, amounts: dict[str, Decimal | None]) -> bytes:
-    """Writes each PO's amount into a "Total Amount" column and returns the .xlsx bytes."""
-    ws = sheet.workbook.active
-    po_header = ws.cell(sheet.header_row, sheet.po_col)
-    col = _total_amount_column(ws, sheet.header_row)
+@dataclass
+class NewColumn:
+    header: str
+    values: dict[str, Decimal | str | None]
+    number_format: str | None = None
+    width: int = 16
 
-    head = ws.cell(sheet.header_row, col, TOTAL_AMOUNT_HEADER)
+
+def add_columns(sheet: DpoSheet, columns: list[NewColumn]) -> bytes:
+    ws = sheet.workbook.active
+    for column in columns:
+        _write_column(ws, sheet, column)
+    out = io.BytesIO()
+    sheet.workbook.save(out)
+    return out.getvalue()
+
+
+def _write_column(ws, sheet: DpoSheet, column: NewColumn) -> None:
+    po_header = ws.cell(sheet.header_row, sheet.po_col)
+    col = _column_for(ws, sheet.header_row, column.header)
+
+    head = ws.cell(sheet.header_row, col, column.header)
     for attr in ("font", "fill", "border", "alignment"):
         setattr(head, attr, copy(getattr(po_header, attr)))
-    ws.column_dimensions[get_column_letter(col)].width = 16
+    ws.column_dimensions[get_column_letter(col)].width = column.width
 
     for r in range(sheet.header_row + 1, ws.max_row + 1):
         po = po_text(ws.cell(r, sheet.po_col).value)
         if not po:
             continue
         cell = ws.cell(r, col)
-        amount = amounts.get(po)
-        if amount is None:
+        value = column.values.get(po)
+        if value is None or value == "":
             cell.value = None
             cell.fill = MISSING_FILL
+        elif isinstance(value, Decimal):
+            cell.value = float(value)
+            cell.number_format = column.number_format or "General"
         else:
-            cell.value = float(amount)
-            cell.number_format = "#,##0.00"
-
-    out = io.BytesIO()
-    sheet.workbook.save(out)
-    return out.getvalue()
+            cell.value = value
 
 
 def po_text(value) -> str:
-    """Cell value → PO as text. Excel often stores 62397850 as the number 62397850.0."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
@@ -142,14 +152,13 @@ def _find_po_header(ws) -> tuple[int, int]:
     )
 
 
-def _total_amount_column(ws, header_row: int) -> int:
-    """Existing "Total Amount" column if the file has one, else the first empty column."""
+def _column_for(ws, header_row: int, header: str) -> int:
     last = 0
     for row in ws.iter_rows():
         for cell in row:
             if cell.value is not None:
                 last = max(last, cell.column)
     for c in range(1, last + 1):
-        if _norm(ws.cell(header_row, c).value) == _norm(TOTAL_AMOUNT_HEADER):
+        if _norm(ws.cell(header_row, c).value) == _norm(header):
             return c
     return last + 1
